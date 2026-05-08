@@ -455,6 +455,20 @@ CREATE UNIQUE INDEX idx_patients_email
     WHERE is_active = TRUE;  -- only one active account per email
     
     
+    
+---------------------------------------
+    
+--############## The most important trade off : Real speed vs write speed#############
+    
+ -- Every index speeds up reads and slows down writes, heres why --> when a new row is inserted( 1 write operation) but it also triggers 
+ -- index ( b-tree ) to also gets updated , so if 3 indexes are created for 3 rows then it will update all the three indexes as well. 
+ -- so one insert/update will trigger more writes( depending on the indexes created)
+    
+    
+   
+    
+    
+    
 --  ############3The Decision Framework: When to Create an index#####################3
 --Here's the mental model to use every time you're considering adding an index:
 --Create an index when:
@@ -470,10 +484,113 @@ CREATE UNIQUE INDEX idx_patients_email
 --The table has very high write volume — every index is a write tax on every INSERT/UPDATE/DELETE
 
 
-			
+    
+ --########## HOW TO VERIFY YOUR INDEX INS BEING USED : EXPLIAN###############333
+   
+ explain select * from lab_results where patient_id = 1001;
+ 
+-- Output without index:
+-- Seq Scan on lab_results  (cost=0.00..45000.00 rows=10000000)
+-- This means: full table scan. Slow.
+
+-- Output WITH index:
+-- Index Scan using idx_lab_results_patient_id on lab_results
+-- This means: index used. Fast.
+
+-- EXPLAIN ANALYZE actually runs the query and shows real timings
+EXPLAIN ANALYZE SELECT * FROM lab_results WHERE patient_id = 1001;
+
+
+
+
+
+--########################### COMPLETE HOSPITAL SCHEMA ###############################333
+
+
+-- build table sin depedency order:  no FKs before the tables they reference 
+
+create table departments (
+	
+	department_id 		bigint generated always as identity primary key , 
+	name				varchar(100) not null unique , 
+	building			varchar(50) not null , 
+	floor				smallint not null check(floor between 1 and 20) , 
+	created_at 			timestamptz not null default now()
+	
+);
+
+
+create table doctors (
+	
+	doctor_id			bigint generated always as identity primary key , 
+	department_id 		bigint 		not null references departments(department_id) on delete restrict , 
+	full_name 			varchar(100) not null , 
+	specialization 		varchar(100) not null , 
+	license_number 		varchar(50)  not null unique , 
+	is_active 			boolean		 not null default true , 
+	joined_at 			date 	 	 not null 
+	
+);
+
+create table patients (
+	
+	patient_id			bigint generated always as identity primary key ,
+	full_name			varchar(100) not null , 
+	date_of_birth		date		 not null , 
+	blood_type			char(3),
+	weight_kg			numeric(5,3) check (weight_kg > 0),
+	email				varchar(255) unique , 
+	phone 				varchar(20) , 
+	is_active			boolean		not null default true , 
+	registered_at		timestamptz	not null default now(), 
+	insurance_data 		jsonb
 	
 
+);
 
+
+create table appointments (
+	
+	appointment_id		bigint generated always as identity primary key , 
+	patient_id 			bigint		not null references patients(patient_id) on delete restrict , 
+	doctor_id			bigint		not null references doctors(doctor_id) on delete restrict , 
+	scheduled_at 		timestamptz	not null , 
+	duration_mins		smallint	not null default 30 check (duration_mins > 30) , 
+	status				varchar(20) not null default 'scheduled' 
+						check( status in ('scheduled' , 'confirmed' , 'completed' , 'cancelled' , 'no-show')), 
+						
+	notes				text , 
+	created_at 			timestamptz not null default now()
+
+);
+
+
+create table lab_results (
+	
+	result_id			bigint generated always as identity primary key , 
+	patient_id			bigint 	not null references patients(patient_id) on delete restrict , 
+	appointment_id		bigint 	references appointments(appointment_id) on delete set null , 
+	test_name 			varchar(100) not null , 
+	result_value		numeric(8,3) , 
+	unit				varchar(20) , 
+	severity 			varchar(20) check (severity in ('normal' , 'mild' , 'moderate' , 'critical')),
+	collected_at		timestamptz not null , 
+	processed_at 		timestamptz check (processed_at is null or processed_at >= collected_at)
+	
+
+);
+
+
+--indexes : always index foreign keys and high-traffic where columns
+
+-- Indexes: always index foreign keys and high-traffic WHERE columns
+CREATE INDEX idx_appointments_patient_id ON appointments(patient_id);
+CREATE INDEX idx_appointments_doctor_id  ON appointments(doctor_id);
+CREATE INDEX idx_appointments_status     ON appointments(status);
+CREATE INDEX idx_lab_results_patient_id  ON lab_results(patient_id);
+CREATE INDEX idx_lab_results_collected_at ON lab_results(collected_at);
+CREATE INDEX idx_critical_labs ON lab_results(patient_id, collected_at)
+    WHERE severity = 'critical';
 
 
 
