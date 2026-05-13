@@ -307,6 +307,71 @@ ON c.customer_id = o.customer_id
 GROUP BY c.customer_id, c.name
 HAVING COUNT(DISTINCT o.product_category) > 1
 ORDER BY unique_categories DESC;
+
+
+--############LEVEL 7 — Combine Everything (Real DE Style Queries)#################
+--These are the queries that appear in actual pipelines and interviews:
+
+-- Q1: Monthly revenue report
+-- Show month, total revenue, total orders, avg order value
+-- Only completed orders
+-- Sorted by month
+
+select 
+	to_char(date_trunc('month' , created_at) , 'yyyy-mm') as Month ,
+	sum(amount) as total_revenue , 
+	count(*) as total_orders , 
+	avg(amount) as average_order_value 
+	from orders
+	where status = 'completed'
+	group by date_trunc('month' , created_at)
+	order by date_trunc('month' , created_at)
+
+	
+	
+-- Q2: Customer leaderboard
+-- Show customer name, city, total orders, total spent
+-- Only customers who spent more than 1000
+-- Sorted by total spent descending
+	
+
+select 
+	c.name , 
+	c.city , 
+	count(*) as total_orders  , 
+	sum(o.amount) as total_spent
+	from orders o 
+	inner join customers c 
+	on o.customer_id = c.customer_id 
+	group by c.customer_id , c.name , c.city
+	having sum(o.amount) > 1000
+	order by sum(o.amount) desc
+	
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 		
 
 
